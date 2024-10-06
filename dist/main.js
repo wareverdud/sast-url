@@ -41,6 +41,7 @@ const isSafari = () => {
 const map = new Map();
 export const register = (cloneUrl, token, resultWatcher) => {
     let pingInterval = null;
+    const changeQueue = [];
     const connect = () => {
         let connectUrl = "wss://dev.service.careflame.ru/getconn";
         if (!isSafari()) {
@@ -49,6 +50,15 @@ export const register = (cloneUrl, token, resultWatcher) => {
         const ws = new WebSocket(connectUrl);
         const state = {
             allowChanges: false,
+        };
+        const processQueue = () => {
+            if (state.allowChanges) {
+                while (changeQueue.length > 0) {
+                    const change = changeQueue.shift();
+                    console.log("Sending request", change);
+                    ws.send(encode(change));
+                }
+            }
         };
         ws.onopen = () => {
             console.log("Connected", cloneUrl);
@@ -72,6 +82,7 @@ export const register = (cloneUrl, token, resultWatcher) => {
             if (data.type === "issues") {
                 resultWatcher(data.data);
                 state.allowChanges = true;
+                processQueue();
             }
             if (data.type === "error") {
                 console.error("Error", data.data);
@@ -87,6 +98,7 @@ export const register = (cloneUrl, token, resultWatcher) => {
             }
             if (data.type === "request" && data.data.message === "want_diff") {
                 state.allowChanges = true;
+                processQueue();
             }
         });
         ws.onclose = (event) => {
@@ -104,7 +116,7 @@ export const register = (cloneUrl, token, resultWatcher) => {
             const patch = diff.structuredPatch("", "", "", originalCode, "", "", {
                 context: 0,
             });
-            if (patch) {
+            if (patch && patch.hunks.length > 0) {
                 patch.hunks.forEach((hunk) => {
                     hunk.lines = hunk.lines.filter((line) => !line.includes("\\ No newline at end of file"));
                 });
@@ -126,9 +138,13 @@ export const register = (cloneUrl, token, resultWatcher) => {
                         ],
                     },
                 };
-                console.log("Sending request", addRequest);
-                if (ws.readyState === WebSocket.OPEN) {
+                if (state.allowChanges && ws.readyState === WebSocket.OPEN) {
+                    console.log("Sending request", addRequest);
                     ws.send(encode(addRequest));
+                }
+                else {
+                    console.log("Queueing request", addRequest);
+                    changeQueue.push(addRequest);
                 }
             }
         });
@@ -136,7 +152,7 @@ export const register = (cloneUrl, token, resultWatcher) => {
             const patch = diff.structuredPatch("", "", originalCode, modifiedCode, "", "", {
                 context: 0,
             });
-            if (patch) {
+            if (patch && patch.hunks.length > 0) {
                 patch.hunks.forEach((hunk) => {
                     hunk.lines = hunk.lines.filter((line) => !line.includes("\\ No newline at end of file"));
                 });
@@ -153,17 +169,18 @@ export const register = (cloneUrl, token, resultWatcher) => {
                         ],
                     },
                 };
-                console.log("Sending request", updRequest);
-                if (ws.readyState === WebSocket.OPEN) {
+                if (state.allowChanges && ws.readyState === WebSocket.OPEN) {
+                    console.log("Sending request", updRequest);
                     ws.send(encode(updRequest));
+                }
+                else {
+                    console.log("Queueing request", updRequest);
+                    changeQueue.push(updRequest);
                 }
             }
         });
         return {
             onChangeCode: (filePath, originalCode, modifiedCode) => __awaiter(void 0, void 0, void 0, function* () {
-                if (!state.allowChanges) {
-                    return;
-                }
                 if (modifiedCode) {
                     update(filePath, originalCode, modifiedCode);
                 }
@@ -172,9 +189,6 @@ export const register = (cloneUrl, token, resultWatcher) => {
                 }
             }),
             deleteFile: (filePath) => __awaiter(void 0, void 0, void 0, function* () {
-                if (!state.allowChanges) {
-                    return;
-                }
                 const request = {
                     type: "diff",
                     data: {
@@ -187,9 +201,13 @@ export const register = (cloneUrl, token, resultWatcher) => {
                         ],
                     },
                 };
-                console.log("Sending request", request);
-                if (ws.readyState === WebSocket.OPEN) {
+                if (state.allowChanges && ws.readyState === WebSocket.OPEN) {
+                    console.log("Sending request", request);
                     ws.send(encode(request));
+                }
+                else {
+                    console.log("Queueing request", request);
+                    changeQueue.push(request);
                 }
             }),
         };
