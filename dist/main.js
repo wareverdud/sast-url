@@ -7,7 +7,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-import * as diff from "diff";
 const hash = (message) => __awaiter(void 0, void 0, void 0, function* () {
     const encoder = new TextEncoder();
     const data = encoder.encode(message);
@@ -41,6 +40,7 @@ const isSafari = () => {
 const map = new Map();
 export const register = (cloneUrl, token, resultWatcher) => {
     let pingInterval = null;
+    let processQueueInterval = null;
     const changeQueue = [];
     const connect = () => {
         let connectUrl = "wss://dev.service.careflame.ru/getconn";
@@ -52,6 +52,7 @@ export const register = (cloneUrl, token, resultWatcher) => {
             allowChanges: false,
         };
         const processQueue = () => {
+            console.log(changeQueue);
             if (state.allowChanges) {
                 while (changeQueue.length > 0) {
                     const change = changeQueue.shift();
@@ -82,7 +83,7 @@ export const register = (cloneUrl, token, resultWatcher) => {
             if (data.type === "issues") {
                 resultWatcher(data.data);
                 state.allowChanges = true;
-                processQueue();
+                processQueueInterval = setInterval(processQueue, 5000);
             }
             if (data.type === "error") {
                 console.error("Error", data.data);
@@ -98,7 +99,7 @@ export const register = (cloneUrl, token, resultWatcher) => {
             }
             if (data.type === "request" && data.data.message === "want_diff") {
                 state.allowChanges = true;
-                processQueue();
+                processQueueInterval = setInterval(processQueue, 5000);
             }
         });
         ws.onclose = (event) => {
@@ -113,71 +114,94 @@ export const register = (cloneUrl, token, resultWatcher) => {
         };
         ws.onerror = (event) => console.error("WebSocket Error", event);
         const add = (filePath, originalCode) => __awaiter(void 0, void 0, void 0, function* () {
-            const patch = diff.structuredPatch("", "", "", originalCode, "", "", {
-                context: 0,
-            });
-            if (patch && patch.hunks.length > 0) {
-                patch.hunks.forEach((hunk) => {
-                    hunk.lines = hunk.lines.filter((line) => !line.includes("\\ No newline at end of file"));
-                });
-                const addRequest = {
-                    type: "diff",
-                    data: {
-                        files: [
-                            {
-                                path: filePath,
-                                status: "add",
-                                hash: yield hash(""),
-                            },
-                            {
-                                path: filePath,
-                                status: "upd",
-                                hash: yield hash(originalCode),
-                                hunks: patch.hunks,
-                            },
-                        ],
-                    },
-                };
-                if (state.allowChanges && ws.readyState === WebSocket.OPEN) {
-                    console.log("Sending request", addRequest);
-                    ws.send(encode(addRequest));
-                }
-                else {
-                    console.log("Queueing request", addRequest);
-                    changeQueue.push(addRequest);
-                }
-            }
+            const request = {
+                path: filePath,
+                status: "add",
+                hash: yield hash(""),
+            };
+            const updRequest = {
+                originalCode: "",
+                modifiedCode: originalCode,
+                path: filePath,
+                status: "upd",
+            };
+            console.log("Queueing request", request);
+            changeQueue.push(request);
+            console.log("Queueing request", updRequest);
+            changeQueue.push(updRequest);
+            // const patch = diff.structuredPatch("", "", "", originalCode, "", "", {
+            //   context: 0,
+            // });
+            // if (patch && patch.hunks.length > 0) {
+            //   patch.hunks.forEach((hunk) => {
+            //     hunk.lines = hunk.lines.filter(
+            //       (line) => !line.includes("\\ No newline at end of file")
+            //     );
+            //   });
+            //   const addRequest = {
+            //     type: "diff",
+            //     data: {
+            //       files: [
+            //         {
+            //           path: filePath,
+            //           status: "add",
+            //           hash: await hash(""),
+            //         },
+            //         {
+            //           path: filePath,
+            //           status: "upd",
+            //           hash: await hash(originalCode),
+            //           hunks: patch.hunks,
+            //         },
+            //       ],
+            //     },
+            //   };
+            //   console.log("Queueing request", addRequest);
+            //   changeQueue.push(addRequest);
+            // }
         });
         const update = (filePath, originalCode, modifiedCode) => __awaiter(void 0, void 0, void 0, function* () {
-            const patch = diff.structuredPatch("", "", originalCode, modifiedCode, "", "", {
-                context: 0,
-            });
-            if (patch && patch.hunks.length > 0) {
-                patch.hunks.forEach((hunk) => {
-                    hunk.lines = hunk.lines.filter((line) => !line.includes("\\ No newline at end of file"));
-                });
-                const updRequest = {
-                    type: "diff",
-                    data: {
-                        files: [
-                            {
-                                path: filePath,
-                                status: "upd",
-                                hash: yield hash(modifiedCode),
-                                hunks: patch.hunks,
-                            },
-                        ],
-                    },
-                };
-                if (state.allowChanges && ws.readyState === WebSocket.OPEN) {
-                    console.log("Sending request", updRequest);
-                    ws.send(encode(updRequest));
-                }
-                else {
-                    console.log("Queueing request", updRequest);
-                    changeQueue.push(updRequest);
-                }
-            }
+            const request = {
+                originalCode: originalCode,
+                modifiedCode: modifiedCode,
+                path: filePath,
+                status: "upd",
+            };
+            console.log("Queueing request", request);
+            changeQueue.push(request);
+            // const patch = diff.structuredPatch(
+            //   "",
+            //   "",
+            //   originalCode,
+            //   modifiedCode,
+            //   "",
+            //   "",
+            //   {
+            //     context: 0,
+            //   }
+            // );
+            // if (patch && patch.hunks.length > 0) {
+            //   patch.hunks.forEach((hunk) => {
+            //     hunk.lines = hunk.lines.filter(
+            //       (line) => !line.includes("\\ No newline at end of file")
+            //     );
+            //   });
+            //   const updRequest = {
+            //     type: "diff",
+            //     data: {
+            //       files: [
+            //         {
+            //           path: filePath,
+            //           status: "upd",
+            //           hash: await hash(modifiedCode),
+            //           hunks: patch.hunks,
+            //         },
+            //       ],
+            //     },
+            //   };
+            //   console.log("Queueing request", updRequest);
+            //   changeQueue.push(updRequest);
+            // }
         });
         return {
             onChangeCode: (filePath, originalCode, modifiedCode) => __awaiter(void 0, void 0, void 0, function* () {
@@ -190,25 +214,24 @@ export const register = (cloneUrl, token, resultWatcher) => {
             }),
             deleteFile: (filePath) => __awaiter(void 0, void 0, void 0, function* () {
                 const request = {
-                    type: "diff",
-                    data: {
-                        files: [
-                            {
-                                path: filePath,
-                                status: "del",
-                                hash: yield hash(filePath),
-                            },
-                        ],
-                    },
+                    path: filePath,
+                    status: "del",
+                    hash: yield hash(filePath),
                 };
-                if (state.allowChanges && ws.readyState === WebSocket.OPEN) {
-                    console.log("Sending request", request);
-                    ws.send(encode(request));
-                }
-                else {
-                    console.log("Queueing request", request);
-                    changeQueue.push(request);
-                }
+                // const request = {
+                //   type: "diff",
+                //   data: {
+                //     files: [
+                //       {
+                //         path: filePath,
+                //         status: "del",
+                //         hash: await hash(filePath),
+                //       },
+                //     ],
+                //   },
+                // };
+                console.log("Queueing request", request);
+                changeQueue.push(request);
             }),
         };
     };
