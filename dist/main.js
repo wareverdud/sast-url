@@ -44,7 +44,6 @@ export const register = (cloneUrl, token, resultWatcher) => {
     let processQueueInterval = null;
     let changeQueue = [];
     const responseMap = new Map();
-    let currentPath = "";
     const connect = () => {
         let connectUrl = "wss://dev.service.careflame.ru/getconn";
         if (!isSafari()) {
@@ -53,6 +52,7 @@ export const register = (cloneUrl, token, resultWatcher) => {
         const ws = new WebSocket(connectUrl);
         const state = {
             allowChanges: false,
+            currentPath: "",
         };
         const updateFiles = new Map();
         const processQueue = () => {
@@ -119,12 +119,12 @@ export const register = (cloneUrl, token, resultWatcher) => {
                     responseArray.push({ path: key, issues: value });
                 });
                 // const filteredResponse = responseArray.filter(
-                //   (value) => value.path === currentPath
+                //   (value) => value.path === state.currentPath
                 // );
-                const filteredResponse = responseArray.filter((value) => value.path.includes(currentPath));
+                const filteredResponse = responseArray.filter((value) => value.path.includes(state.currentPath));
                 console.log("Response array", responseArray);
-                console.log("Filtered response array", currentPath === "" ? responseArray : filteredResponse);
-                resultWatcher(currentPath === "" ? responseArray : filteredResponse);
+                console.log("Filtered response array", state.currentPath === "" ? responseArray : filteredResponse);
+                resultWatcher(responseArray);
                 state.allowChanges = true;
                 if (processQueueInterval) {
                     clearInterval(processQueueInterval);
@@ -198,7 +198,7 @@ export const register = (cloneUrl, token, resultWatcher) => {
         });
         return {
             onChangeCode: (filePath, originalCode, modifiedCode) => __awaiter(void 0, void 0, void 0, function* () {
-                currentPath = filePath;
+                state.currentPath = filePath;
                 if (modifiedCode) {
                     update(filePath, originalCode, modifiedCode);
                 }
