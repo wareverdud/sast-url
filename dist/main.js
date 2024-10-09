@@ -119,8 +119,10 @@ export const register = (cloneUrl, token, resultWatcher) => {
                     responseArray.push({ path: key, issues: value });
                 });
                 console.log("Response array", responseArray);
-                const filteredResponse = [responseMap.get(state.currentPath)];
-                console.log("Filtered response array", filteredResponse);
+                if (state.currentPath !== "") {
+                    const filteredResponse = responseMap.get(state.currentPath);
+                    console.log("Filtered response array", filteredResponse);
+                }
                 resultWatcher(responseArray);
                 state.allowChanges = true;
                 if (processQueueInterval) {
