@@ -44,6 +44,7 @@ export const register = (cloneUrl, token, resultWatcher) => {
     let processQueueInterval = null;
     let changeQueue = [];
     const responseMap = new Map();
+    let currentPath = "";
     const connect = () => {
         let connectUrl = "wss://dev.service.careflame.ru/getconn";
         if (!isSafari()) {
@@ -111,16 +112,19 @@ export const register = (cloneUrl, token, resultWatcher) => {
             if (data.type === "issues") {
                 const response = data.data;
                 response.forEach((item) => {
-                    // if (!responseMap.has(item.path)) {
                     responseMap.set(item.path, item.issues);
-                    // }
                 });
                 const responseArray = [];
                 responseMap.forEach((value, key) => {
                     responseArray.push({ path: key, issues: value });
                 });
+                // const filteredResponse = responseArray.filter(
+                //   (value) => value.path === currentPath
+                // );
+                const filteredResponse = responseArray.filter((value) => value.path.includes(currentPath));
                 console.log("Response array", responseArray);
-                resultWatcher(responseArray);
+                console.log("Filtered response array", currentPath === "" ? responseArray : filteredResponse);
+                resultWatcher(currentPath === "" ? responseArray : filteredResponse);
                 state.allowChanges = true;
                 if (processQueueInterval) {
                     clearInterval(processQueueInterval);
@@ -194,6 +198,7 @@ export const register = (cloneUrl, token, resultWatcher) => {
         });
         return {
             onChangeCode: (filePath, originalCode, modifiedCode) => __awaiter(void 0, void 0, void 0, function* () {
+                currentPath = filePath;
                 if (modifiedCode) {
                     update(filePath, originalCode, modifiedCode);
                 }
