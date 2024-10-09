@@ -118,12 +118,9 @@ export const register = (cloneUrl, token, resultWatcher) => {
                 responseMap.forEach((value, key) => {
                     responseArray.push({ path: key, issues: value });
                 });
-                // const filteredResponse = responseArray.filter(
-                //   (value) => value.path === state.currentPath
-                // );
-                const filteredResponse = responseArray.filter((value) => value.path.includes(state.currentPath));
                 console.log("Response array", responseArray);
-                console.log("Filtered response array", state.currentPath === "" ? responseArray : filteredResponse);
+                const filteredResponse = [responseMap.get(state.currentPath)];
+                console.log("Filtered response array", filteredResponse);
                 resultWatcher(responseArray);
                 state.allowChanges = true;
                 if (processQueueInterval) {
@@ -198,23 +195,31 @@ export const register = (cloneUrl, token, resultWatcher) => {
         });
         return {
             onChangeCode: (filePath, originalCode, modifiedCode) => __awaiter(void 0, void 0, void 0, function* () {
-                state.currentPath = filePath;
+                let path = filePath;
+                if (filePath.startsWith("/")) {
+                    path = filePath.slice(1);
+                }
+                state.currentPath = path;
                 if (modifiedCode) {
-                    update(filePath, originalCode, modifiedCode);
+                    update(path, originalCode, modifiedCode);
                 }
                 else {
-                    add(filePath, originalCode);
+                    add(path, originalCode);
                 }
             }),
             deleteFile: (filePath) => __awaiter(void 0, void 0, void 0, function* () {
+                let path = filePath;
+                if (filePath.startsWith("/")) {
+                    path = filePath.slice(1);
+                }
                 const request = {
                     type: "diff",
                     data: {
                         files: [
                             {
-                                path: filePath,
+                                path: path,
                                 status: "del",
-                                hash: yield hash(filePath),
+                                hash: yield hash(path),
                             },
                         ],
                     },
