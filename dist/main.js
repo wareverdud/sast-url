@@ -44,6 +44,10 @@ export const register = (cloneUrl, token, resultWatcher) => {
     let processQueueInterval = null;
     let changeQueue = [];
     const responseMap = new Map();
+    const oldContents = new Map();
+    const statePath = {
+        currentPath: "",
+    };
     const connect = () => {
         let connectUrl = "wss://dev.service.careflame.ru/getconn";
         if (!isSafari()) {
@@ -52,7 +56,6 @@ export const register = (cloneUrl, token, resultWatcher) => {
         const ws = new WebSocket(connectUrl);
         const state = {
             allowChanges: false,
-            currentPath: "",
         };
         const updateFiles = new Map();
         const processQueue = () => {
@@ -63,13 +66,16 @@ export const register = (cloneUrl, token, resultWatcher) => {
                     ws.send(encode(change));
                 }
                 updateFiles.forEach((request, path) => __awaiter(void 0, void 0, void 0, function* () {
-                    const patch = diff.structuredPatch("", "", request.original, request.modified, "", "", {
+                    let original = request.original;
+                    const oldContentsEntry = oldContents.get(path);
+                    if (oldContentsEntry) {
+                        original = oldContentsEntry;
+                    }
+                    const patch = diff.structuredPatch("", "", original, request.modified, "", "", {
                         context: 0,
                     });
+                    oldContents.set(path, request.modified);
                     if (patch && patch.hunks.length > 0) {
-                        patch.hunks.forEach((hunk) => {
-                            hunk.lines = hunk.lines.filter((line) => !line.includes("\\ No newline at end of file"));
-                        });
                         const updRequest = {
                             type: "diff",
                             data: {
@@ -119,8 +125,9 @@ export const register = (cloneUrl, token, resultWatcher) => {
                     responseArray.push({ path: key, issues: value });
                 });
                 console.log("Response array", responseArray);
-                if (state.currentPath !== "") {
-                    const filteredResponse = responseMap.get(state.currentPath);
+                console.log(statePath.currentPath);
+                if (statePath.currentPath !== "") {
+                    const filteredResponse = responseMap.get(statePath.currentPath);
                     console.log("Filtered response array", filteredResponse);
                 }
                 resultWatcher(responseArray);
@@ -158,10 +165,12 @@ export const register = (cloneUrl, token, resultWatcher) => {
             if (processQueueInterval)
                 clearInterval(processQueueInterval);
             responseMap.clear();
-            setTimeout(() => {
-                console.log("Reconnecting...");
-                connect();
-            }, 2000);
+            if (event.code === 1006) {
+                setTimeout(() => {
+                    console.log("Reconnecting...");
+                    connect();
+                }, 2000);
+            }
         };
         ws.onerror = (event) => console.error("WebSocket Error", event);
         const add = (filePath, originalCode) => __awaiter(void 0, void 0, void 0, function* () {
@@ -201,7 +210,8 @@ export const register = (cloneUrl, token, resultWatcher) => {
                 if (filePath.startsWith("/")) {
                     path = filePath.slice(1);
                 }
-                state.currentPath = path;
+                statePath.currentPath = path;
+                console.log("Path cached", statePath.currentPath);
                 if (modifiedCode) {
                     update(path, originalCode, modifiedCode);
                 }
@@ -236,7 +246,7 @@ export const register = (cloneUrl, token, resultWatcher) => {
 export const disconnect = (cloneUrl) => {
     const ws = map.get(cloneUrl);
     if (ws) {
-        ws.close();
+        ws.close(1000);
         map.delete(cloneUrl);
     }
 };
